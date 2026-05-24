@@ -27,7 +27,7 @@ client = discord.Client(self_bot=True)
 # ===== CONFIG =====
 prefix = "?"
 start_time = time.time()
-CANAL_DE_VOZ_ID = 1471043406544375964  # ID correto do seu canal de voz
+CANAL_DE_VOZ_ID = 1471043406544375964
 
 # 🔥 LISTA DE IDS PERMITIDOS
 ALLOWED_IDS = [
@@ -66,7 +66,7 @@ async def rotacao_status():
             print("Erro status:", e)
             await asyncio.sleep(5)
 
-# ===== SUSTENTAÇÃO DA CALL 24H =====
+# ===== GUARDIÃO ANTI-KICK DA CALL =====
 async def manter_call_viva():
     await client.wait_until_ready()
     while True:
@@ -75,27 +75,26 @@ async def manter_call_viva():
             if canal:
                 vc = canal.guild.voice_client
                 
-                # Se não estiver conectado a nenhum canal de voz, conecta de forma limpa
                 if not vc or not vc.is_connected():
-                    await canal.connect(reconnect=True, self_mute=False, self_deaf=False)
-                    print(f"📡 Conectado com sucesso ao canal de voz: {canal.name}")
+                    # Mudança fundamental: Conecta em modo passivo pura para não disparar o anti-cheat de voz
+                    await canal.connect(reconnect=True)
+                    print(f"📡 Tentativa de conexão limpa enviada para: {canal.name}")
                 
-                # Se estiver conectado, mas o guardião notar que foi movido pra outro canal por engano, volta pro certo
                 elif vc.channel.id != canal.id:
                     await vc.move_to(canal)
                     
         except Exception as e:
             print(f"Erro no monitoramento da call: {e}")
             
-        # Verifica a conexão de forma segura a cada 10 segundos
-        await asyncio.sleep(10)
+        # Espera 15 segundos antes de checar de novo (evita flood de IP no Railway)
+        await asyncio.sleep(15)
 
 # ===== EVENTOS =====
 @client.event
 async def on_ready():
     print(f"🟢 Logado como {client.user} | ID: {client.user.id}")
     client.loop.create_task(rotacao_status())
-    client.loop.create_task(manter_call_viva()) # Inicia o guardião da call junto com o bot
+    client.loop.create_task(manter_call_viva())
 
 # ===== HANDLER DE COMANDO =====
 async def handle_command(message):
@@ -104,7 +103,6 @@ async def handle_command(message):
     content = message.content.strip()
     print("MSG:", content, "| AUTHOR:", message.author.id)
 
-    # 🔒 PERMISSÃO (SEM MENSAGEM DE ERRO)
     if message.author.id != client.user.id and message.author.id not in ALLOWED_IDS:
         return
 
@@ -140,7 +138,6 @@ async def handle_command(message):
                 resultado = await local_vars["_exec"](message, client)
 
             saida = stdout.getvalue()
-
             resposta = "✅ Código executado com sucesso!\n"
 
             if saida:
@@ -163,15 +160,12 @@ async def handle_command(message):
             erro = traceback.format_exc()
             if len(erro) > 1900:
                 erro = erro[:1900] + "\n... (cortado)"
-            await message.channel.send(
-                f"❌ Erro ao executar:\n```py\n{erro}\n```"
-            )
+            await message.channel.send(f"❌ Erro ao executar:\n```py\n{erro}\n```")
 
     # ===== setstatus =====
     elif content.startswith(f"{prefix}setstatus"):
         try:
             args = content.split()
-
             if len(args) < 2:
                 await message.channel.send("Uso: ?setstatus online/dnd/idle/invisible")
                 return
@@ -191,7 +185,6 @@ async def handle_command(message):
                 await message.channel.send(f"Status: {status_arg}")
             else:
                 await message.channel.send("Status inválido")
-
         except Exception as e:
             await message.channel.send(f"Erro: {e}")
 
@@ -204,16 +197,13 @@ async def handle_command(message):
     elif content.startswith(f"{prefix}say"):
         try:
             corpo = content[len(f"{prefix}say"):].strip()
-            
             if not corpo:
                 return
 
             args = corpo.split(" ", 1)
-            
             if args[0].isdigit() and len(args[0]) >= 17:
                 canal_id = int(args[0])
                 canal = client.get_channel(canal_id)
-                
                 if canal:
                     texto_para_enviar = args[1] if len(args) > 1 else "..."
                     await canal.send(texto_para_enviar)
@@ -221,7 +211,6 @@ async def handle_command(message):
                     await message.channel.send(corpo)
             else:
                 await message.channel.send(corpo)
-
         except Exception as e:
             print(f"Erro no say: {e}")
 
@@ -234,14 +223,12 @@ async def on_message(message):
 async def on_message_edit(before, after):
     if after.author.id == client.user.id:
         return
-
     await handle_command(after)
 
 # ===== RUN =====
 token = os.environ.get("TOKEN")
-
 if not token:
     raise Exception("TOKEN não definido")
 
 client.run(token)
-                    
+            
