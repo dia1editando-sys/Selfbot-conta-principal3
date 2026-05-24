@@ -1,0 +1,8 @@
+{
+  "name": "lilly-call-24h",
+  "version": "1.0.0",
+  "main": "call.js",
+  "dependencies": {
+    "discord.js-selfbot-v13": "^3.4.4"
+  }
+}
