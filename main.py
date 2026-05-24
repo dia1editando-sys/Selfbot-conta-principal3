@@ -1,245 +1,214 @@
-import os
-import discord
-import asyncio
-import time
-from flask import Flask
-from threading import Thread
+const { Client } = require('discord.js-selfbot-v13');
+const express = require('express');
 
-# ===== WEB (Railway) =====
-app = Flask(__name__)
+// ===== WEB (Railway) =====
+const app = express();
+const port = process.env.PORT || 8080;
 
-@app.route("/")
-def home():
-    return "OK", 200
+app.get('/', (req, res) => {
+    res.send('OK');
+});
 
-def run_web():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+app.listen(port, () => {
+    console.log(`🌐 Servidor Web rodando na porta ${port}`);
+});
 
-def start_web():
-    Thread(target=run_web, daemon=True).start()
+// ===== DISCORD =====
+const client = new Client({ checkUpdate: false });
 
-start_web()
+const prefix = "?";
+const CANAL_DE_VOZ_ID = "1471043406544375964";
 
-# ===== DISCORD =====
-client = discord.Client(self_bot=True)
+// 🔥 LISTA DE IDS PERMITIDOS
+const ALLOWED_IDS = [
+    "932012274569338981",
+    "1473488490795896997",
+    "569633804537430036",
+    "932011766651703358"
+];
 
-# ===== CONFIG =====
-prefix = "?"
-start_time = time.time()
-CANAL_DE_VOZ_ID = 1471043406544375964
+let statusManual = false;
 
-# 🔥 LISTA DE IDS PERMITIDOS
-ALLOWED_IDS = [
-    932012274569338981,
-    1473488490795896997, 569633804537430036, 932011766651703358
-]
+// ===== STATUS ROTATIVO =====
+async function rotacaoStatus() {
+    const atividades = ["Arena Breakout", "Arena Breakout", "Arena Breakout"];
+    let i = 0;
 
-status_manual = False
-
-# ===== STATUS ROTATIVO =====
-async def rotacao_status():
-    await client.wait_until_ready()
-    i = 0
-
-    while True:
-        try:
-            if status_manual:
-                await asyncio.sleep(5)
-                continue
-
-            atividades = [
-                discord.Activity(type=discord.ActivityType.playing, name="Arena Breakout"),
-                discord.Activity(type=discord.ActivityType.playing, name="Arena Breakout"),
-                discord.Activity(type=discord.ActivityType.playing, name="Arena Breakout")
-            ]
-
-            await client.change_presence(
-                status=discord.Status.dnd,
-                activity=atividades[i % len(atividades)]
-            )
-
-            i += 1
-            await asyncio.sleep(10)
-
-        except Exception as e:
-            print("Erro status:", e)
-            await asyncio.sleep(5)
-
-# ===== REPARO DO ERRO 4014 (Sustentação Direta via WebSocket) =====
-async def manter_call_viva():
-    await client.wait_until_ready()
-    while True:
-        try:
-            # Pega o ID da guilda (servidor) baseado no canal
-            canal = client.get_channel(CANAL_DE_VOZ_ID) or await client.fetch_channel(CANAL_DE_VOZ_ID)
-            
-            if canal:
-                guild = canal.guild
-                vc = guild.voice_client
-
-                # Se não estiver na call, força o envio do pacote do gateway
-                if not vc or not vc.is_connected():
-                    print("⚠️ Erro 4014 detectado ou bot fora. Forçando reconexão limpa...")
-                    
-                    # Desconecta qualquer sessão fantasma anterior antes
-                    if vc:
-                        try:
-                            await vc.disconnect(force=True)
-                        except Exception:
-                            pass
-                    
-                    # Conecta usando o fallback de WebSocket
-                    await canal.connect(reconnect=True, self_mute=False, self_deaf=False)
-                
-                elif vc.channel.id != canal.id:
-                    await vc.move_to(canal)
-
-        except Exception as e:
-            print(f"Erro no monitoramento de voz: {e}")
-            
-        # Espera 10 segundos antes da próxima checagem automática
-        await asyncio.sleep(10)
-
-# ===== EVENTOS =====
-@client.event
-async def on_ready():
-    print(f"🟢 Logado como {client.user} | ID: {client.user.id}")
-    client.loop.create_task(rotacao_status())
-    client.loop.create_task(manter_call_viva())
-
-# ===== HANDLER DE COMANDO =====
-async def handle_command(message):
-    global status_manual
-
-    content = message.content.strip()
-    print("MSG:", content, "| AUTHOR:", message.author.id)
-
-    if message.author.id != client.user.id and message.author.id not in ALLOWED_IDS:
-        return
-
-    # ===== EVAL =====
-    if content.startswith(f"{prefix}eval"):
-        if message.author.id not in ALLOWED_IDS:
-            return
-
-        codigo = content[len(f"{prefix}eval"):].strip()
-
-        if not codigo:
-            await message.channel.send("Sem código.")
-            return
-
-        import io
-        import contextlib
-        import traceback
-
-        if codigo.startswith("```"):
-            codigo = "\n".join(codigo.split("\n")[1:-1])
-
-        stdout = io.StringIO()
-
-        try:
-            exec_code = "async def _exec(message, client):\n"
-            for linha in codigo.split("\n"):
-                exec_code += f"    {linha}\n"
-
-            local_vars = {}
-            exec(exec_code, globals(), local_vars)
-
-            with contextlib.redirect_stdout(stdout):
-                resultado = await local_vars["_exec"](message, client)
-
-            saida = stdout.getvalue()
-            resposta = "✅ Código executado com sucesso!\n"
-
-            if saida:
-                if len(saida) > 1900:
-                    saida = saida[:1900] + "\n... (cortado)"
-                resposta += f"📤 Saída:\n```py\n{saida}\n```"
-
-            if resultado is not None:
-                resultado_str = str(resultado)
-                if len(resultado_str) > 1900:
-                    resultado_str = resultado_str[:1900] + "\n... (cortado)"
-                resposta += f"\n📥 Retorno:\n```py\n{resultado_str}\n```"
-
-            if not saida and resultado is None:
-                resposta += "ℹ️ Nenhuma saída foi produzida."
-
-            await message.channel.send(resposta)
-
-        except Exception:
-            erro = traceback.format_exc()
-            if len(erro) > 1900:
-                erro = erro[:1900] + "\n... (cortado)"
-            await message.channel.send(f"❌ Erro ao executar:\n```py\n{erro}\n```")
-
-    # ===== setstatus =====
-    elif content.startswith(f"{prefix}setstatus"):
-        try:
-            args = content.split()
-            if len(args) < 2:
-                await message.channel.send("Uso: ?setstatus online/dnd/idle/invisible")
-                return
-
-            status_map = {
-                "online": discord.Status.online,
-                "idle": discord.Status.idle,
-                "dnd": discord.Status.dnd,
-                "invisible": discord.Status.invisible
+    while (true) {
+        try {
+            if (statusManual) {
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                continue;
             }
 
-            status_arg = args[1].lower()
+            client.user.setPresence({
+                status: 'dnd',
+                activities: [{
+                    name: atividades[i % atividades.length],
+                    type: 'PLAYING'
+                }]
+            });
 
-            if status_arg in status_map:
-                status_manual = True
-                await client.change_presence(status=status_map[status_arg])
-                await message.channel.send(f"Status: {status_arg}")
-            else:
-                await message.channel.send("Status inválido")
-        except Exception as e:
-            await message.channel.send(f"Erro: {e}")
+            i++;
+            await new Promise(resolve => setTimeout(resolve, 10000));
+        } catch (err) {
+            console.error("Erro status:", err);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+    }
+}
 
-    # ===== resetstatus =====
-    elif content.startswith(f"{prefix}resetstatus"):
-        status_manual = False
-        await message.channel.send("Status automático ativado")
+// ===== GUARDIÃO DA CALL =====
+async function manterCallViva() {
+    while (true) {
+        try {
+            const canal = await client.channels.fetch(CANAL_DE_VOZ_ID).catch(() => null);
+            if (canal && canal.isVoice()) {
+                const connection = canal.guild.me.voice;
+                
+                // Se não estiver conectado no canal correto, conecta imitando perfeitamente o app oficial
+                if (!connection || connection.channelId !== canal.id) {
+                    console.log("📡 Conectando ao canal de voz via Node.js...");
+                    await canal.connectToVoice({
+                        selfMute: false,
+                        selfDeaf: false,
+                        video: false
+                    });
+                    console.log("✅ Fixado na call com sucesso!");
+                }
+            }
+        } catch (err) {
+            console.error("Erro no monitoramento da call:", err);
+        }
+        // Verifica a cada 10 segundos de forma estável
+        await new Promise(resolve => setTimeout(resolve, 10000));
+    }
+}
 
-    # ===== say =====
-    elif content.startswith(f"{prefix}say"):
-        try:
-            corpo = content[len(f"{prefix}say"):].strip()
-            if not corpo:
-                return
+// ===== EVENTOS =====
+client.on('ready', () => {
+    console.log(`🟢 Logado como ${client.user.tag} | ID: ${client.user.id}`);
+    rotacaoStatus();
+    manterCallViva();
+});
 
-            args = corpo.split(" ", 1)
-            if args[0].isdigit() and len(args[0]) >= 17:
-                canal_id = int(args[0])
-                canal = client.get_channel(canal_id)
-                if canal:
-                    texto_para_enviar = args[1] if len(args) > 1 else "..."
-                    await canal.send(texto_para_enviar)
-                else:
-                    await message.channel.send(corpo)
-            else:
-                await message.channel.send(corpo)
-        except Exception as e:
-            print(f"Erro no say: {e}")
+// ===== HANDLER DE COMANDO =====
+async function handleCommand(message) {
+    let content = message.content.trim();
+    
+    // Ignora se for o próprio bot (opcional, dependendo de como você usa) ou se não for dono/permitido
+    if (message.author.id !== client.user.id && !ALLOWED_IDS.includes(message.author.id)) {
+        return;
+    }
 
-# ===== EVENTOS =====
-@client.event
-async def on_message(message):
-    await handle_command(message)
+    // ===== EVAL =====
+    if (content.startsWith(`${prefix}eval`)) {
+        if (!ALLOWED_IDS.includes(message.author.id) && message.author.id !== client.user.id) return;
 
-@client.event
-async def on_message_edit(before, after):
-    if after.author.id == client.user.id:
-        return
-    await handle_command(after)
+        let codigo = content.slice(`${prefix}eval`.length).trim();
+        if (!codigo) {
+            return message.channel.send("Sem código.");
+        }
 
-# ===== RUN =====
-token = os.environ.get("TOKEN")
-if not token:
-    raise Exception("TOKEN não definido")
+        if (codigo.startsWith("```")) {
+            const linhas = codigo.split("\n");
+            if (linhas[0].startsWith("```js") || linhas[0].startsWith("```javascript") || linhas[0].startsWith("```py")) {
+                codigo = linhas.slice(1, -1).join("\n");
+            } else {
+                codigo = linhas.slice(1, -1).join("\n");
+            }
+        }
 
-client.run(token)
+        try {
+            // Cria uma função assíncrona para rodar o eval e permitir 'await'
+            const evaledFunc = new Function('message', 'client', `return (async () => { ${codigo} })()`);
+            let resultado = await evaledFunc(message, client);
+
+            if (typeof resultado !== "string") {
+                resultado = require('util').inspect(resultado, { depth: 0 });
+            }
+
+            let resposta = "✅ Código executado com sucesso!\n";
+            if (resultado && resultado !== "undefined") {
+                if (resultado.length > 1900) resultado = resultado.slice(0, 1900) + "\n... (cortado)";
+                resposta += `📥 Retorno:\n\`\`\`js\n${resultado}\n\`\`\``;
+            } else {
+                resposta += "ℹ️ Nenhuma saída foi produzida.";
+            }
+
+            await message.channel.send(resposta);
+        } catch (err) {
+            let erro = err.stack || err.toString();
+            if (erro.length > 1900) erro = erro.slice(0, 1900) + "\n... (cortado)";
+            await message.channel.send(`❌ Erro ao executar:\n\`\`\`js\n${erro}\n\`\`\``);
+        }
+    }
+
+    // ===== SETSTATUS =====
+    else if (content.startsWith(`${prefix}setstatus`)) {
+        const args = content.split(/\s+/);
+        if (args.length < 2) {
+            return message.channel.send("Uso: ?setstatus online/dnd/idle/invisible");
+        }
+
+        const statusArg = args[1].toLowerCase();
+        const validStatuses = ["online", "idle", "dnd", "invisible"];
+
+        if (validStatuses.includes(statusArg)) {
+            statusManual = true;
+            client.user.setPresence({ status: statusArg });
+            await message.channel.send(`Status: ${statusArg}`);
+        } else {
+            await message.channel.send("Status inválido");
+        }
+    }
+
+    // ===== RESETSTATUS =====
+    else if (content.startsWith(`${prefix}resetstatus`)) {
+        statusManual = false;
+        await message.channel.send("Status automático ativado");
+    }
+
+    // ===== SAY =====
+    else if (content.startsWith(`${prefix}say`)) {
+        try {
+            const corpo = content.slice(`${prefix}say`.length).trim();
+            if (!corpo) return;
+
+            const args = corpo.split(/\s+/, 1);
+            const primeiroArg = args[0];
+
+            // Verifica se o primeiro argumento é um ID de canal válido (apenas números longos)
+            if (/^\d{17,20}$/.test(primeiroArg)) {
+                const canalId = primeiroArg;
+                const textoParaEnviar = corpo.slice(canalId.length).trim() || "...";
+                
+                const canal = await client.channels.fetch(canalId).catch(() => null);
+                if (canal && canal.isText()) {
+                    await canal.send(textoParaEnviar);
+                } else {
+                    await message.channel.send(corpo);
+                }
+            } else {
+                await message.channel.send(corpo);
+            }
+        } catch (err) {
+            console.error("Erro no say:", err);
+        }
+    }
+}
+
+client.on('messageCreate', handleCommand);
+client.on('messageUpdate', async (before, after) => {
+    if (!after.author || after.author.id === client.user.id) return;
+    handleCommand(after);
+});
+
+// ===== RUN =====
+const token = process.env.TOKEN;
+if (!token) {
+    console.error("TOKEN não definido nas variáveis de ambiente!");
+    process.exit(1);
+}
+
+client.login(token);
