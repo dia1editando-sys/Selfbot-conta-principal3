@@ -58,33 +58,30 @@ async function rotacaoStatus() {
     }
 }
 
-// ===== GUARDIÃO DA CALL (COM TRACKING DE ERRO DETALHADO) =====
+// ===== GUARDIÃO DA CALL DEFINITIVO =====
 async function manterCallViva() {
     while (true) {
         try {
             const canal = await client.channels.fetch(CANAL_DE_VOZ_ID).catch(() => null);
             if (canal) {
-                const guilda = canal.guild;
-                const estouNaCall = guilda.voiceStates.cache.get(client.user.id)?.channelId === canal.id;
+                // Checa o ID da conexão atual da conta com o gateway de voz
+                const conexaoAtual = client.voice.adapters.get(canal.guild.id);
                 
-                if (!estouNaCall) {
-                    console.log(`📡 Tentando estabelecer conexão com a call: ${canal.name}...`);
-                    
+                if (!conexaoAtual) {
+                    console.log(`📡 Conectando ao canal de voz via Node.js...`);
                     await client.voice.join(canal, {
                         selfMute: false,
                         selfDeaf: false,
                         video: false
                     });
-                    
-                    console.log("✅ Conexão bem-sucedida e fixada via WebSocket!");
+                    console.log("✅ Fixado na call com sucesso!");
                 }
-            } else {
-                console.log("⚠️ Canal de voz não encontrado. Verifique se o ID está correto ou se o bot tem acesso.");
             }
         } catch (err) {
-            console.error("❌ O Discord rejeitou a conexão de voz externa:", err.message || err);
+            console.error("Erro no monitoramento da call:", err.message || err);
         }
-        await new Promise(resolve => setTimeout(resolve, 12000));
+        // Verifica a cada 10 segundos de forma estável
+        await new Promise(resolve => setTimeout(resolve, 10000));
     }
 }
 
@@ -97,7 +94,9 @@ client.on('ready', () => {
 
 // ===== HANDLER DE COMANDO =====
 async function handleCommand(message) {
-    if (!message.content) return;
+    // 🛡️ PROTEÇÃO: Ignora se a mensagem não tiver conteúdo escrito (Corrige o erro do log!)
+    if (!message || !message.content) return;
+    
     let content = message.content.trim();
     
     if (message.author.id !== client.user.id && !ALLOWED_IDS.includes(message.author.id)) {
@@ -116,7 +115,7 @@ async function handleCommand(message) {
             if (linhas[0].startsWith("```js") || linhas[0].startsWith("```javascript") || linhas[0].startsWith("```py")) {
                 codigo = linhas.slice(1, -1).join("\n");
             } else {
-                codigo = Array.isArray(linhas) ? linhas.slice(1, -1).join("\n") : codigo;
+                codigo = linhas.slice(1, -1).join("\n");
             }
         }
 
@@ -199,7 +198,8 @@ async function handleCommand(message) {
 
 client.on('messageCreate', handleCommand);
 client.on('messageUpdate', async (before, after) => {
-    if (!after.author || after.author.id === client.user.id) return;
+    // Evita crash se a mensagem editada virar um embed ou ficar sem texto
+    if (!after || !after.author || after.author.id === client.user.id) return;
     handleCommand(after);
 });
 
@@ -211,4 +211,4 @@ if (!token) {
 }
 
 client.login(token);
-                
+        
