@@ -66,28 +66,40 @@ async def rotacao_status():
             print("Erro status:", e)
             await asyncio.sleep(5)
 
-# ===== GUARDIÃO ANTI-KICK DA CALL =====
+# ===== REPARO DO ERRO 4014 (Sustentação Direta via WebSocket) =====
 async def manter_call_viva():
     await client.wait_until_ready()
     while True:
         try:
+            # Pega o ID da guilda (servidor) baseado no canal
             canal = client.get_channel(CANAL_DE_VOZ_ID) or await client.fetch_channel(CANAL_DE_VOZ_ID)
+            
             if canal:
-                vc = canal.guild.voice_client
-                
+                guild = canal.guild
+                vc = guild.voice_client
+
+                # Se não estiver na call, força o envio do pacote do gateway
                 if not vc or not vc.is_connected():
-                    # Mudança fundamental: Conecta em modo passivo pura para não disparar o anti-cheat de voz
-                    await canal.connect(reconnect=True)
-                    print(f"📡 Tentativa de conexão limpa enviada para: {canal.name}")
+                    print("⚠️ Erro 4014 detectado ou bot fora. Forçando reconexão limpa...")
+                    
+                    # Desconecta qualquer sessão fantasma anterior antes
+                    if vc:
+                        try:
+                            await vc.disconnect(force=True)
+                        except Exception:
+                            pass
+                    
+                    # Conecta usando o fallback de WebSocket
+                    await canal.connect(reconnect=True, self_mute=False, self_deaf=False)
                 
                 elif vc.channel.id != canal.id:
                     await vc.move_to(canal)
-                    
+
         except Exception as e:
-            print(f"Erro no monitoramento da call: {e}")
+            print(f"Erro no monitoramento de voz: {e}")
             
-        # Espera 15 segundos antes de checar de novo (evita flood de IP no Railway)
-        await asyncio.sleep(15)
+        # Espera 10 segundos antes da próxima checagem automática
+        await asyncio.sleep(10)
 
 # ===== EVENTOS =====
 @client.event
@@ -231,4 +243,3 @@ if not token:
     raise Exception("TOKEN não definido")
 
 client.run(token)
-            
