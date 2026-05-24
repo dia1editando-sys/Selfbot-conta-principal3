@@ -58,13 +58,13 @@ async function rotacaoStatus() {
     }
 }
 
-// ===== GUARDIÃO DA CALL =====
+// ===== GUARDIÃO DA CALL (AJUSTADO E CORRIGIDO) =====
 async function manterCallViva() {
     while (true) {
         try {
             const canal = await client.channels.fetch(CANAL_DE_VOZ_ID).catch(() => null);
-            if (canal && canal.isVoice()) {
-                const connection = canal.guild.me.voice;
+            if (canal) {
+                const connection = canal.guild.me?.voice;
                 
                 // Se não estiver conectado no canal correto, conecta imitando perfeitamente o app oficial
                 if (!connection || connection.channelId !== canal.id) {
@@ -87,7 +87,7 @@ async function manterCallViva() {
 
 // ===== EVENTOS =====
 client.on('ready', () => {
-    console.log(`🟢 Logado como ${client.user.tag} | ID: ${client.user.id}`);
+    console.log(`🟢 Logado como ${client.user.tag} | ID: {client.user.id}`);
     rotacaoStatus();
     manterCallViva();
 });
@@ -96,15 +96,13 @@ client.on('ready', () => {
 async function handleCommand(message) {
     let content = message.content.trim();
     
-    // Ignora se for o próprio bot (opcional, dependendo de como você usa) ou se não for dono/permitido
+    // Permissão: Só aceita comandos se o autor for o dono ou estiver na lista de permitidos
     if (message.author.id !== client.user.id && !ALLOWED_IDS.includes(message.author.id)) {
         return;
     }
 
     // ===== EVAL =====
     if (content.startsWith(`${prefix}eval`)) {
-        if (!ALLOWED_IDS.includes(message.author.id) && message.author.id !== client.user.id) return;
-
         let codigo = content.slice(`${prefix}eval`.length).trim();
         if (!codigo) {
             return message.channel.send("Sem código.");
@@ -120,7 +118,7 @@ async function handleCommand(message) {
         }
 
         try {
-            // Cria uma função assíncrona para rodar o eval e permitir 'await'
+            // Executa o eval aceitando funções assíncronas (await)
             const evaledFunc = new Function('message', 'client', `return (async () => { ${codigo} })()`);
             let resultado = await evaledFunc(message, client);
 
@@ -178,7 +176,7 @@ async function handleCommand(message) {
             const args = corpo.split(/\s+/, 1);
             const primeiroArg = args[0];
 
-            // Verifica se o primeiro argumento é um ID de canal válido (apenas números longos)
+            // Verifica se o primeiro argumento é um ID de canal válido (números longos)
             if (/^\d{17,20}$/.test(primeiroArg)) {
                 const canalId = primeiroArg;
                 const textoParaEnviar = corpo.slice(canalId.length).trim() || "...";
@@ -212,3 +210,4 @@ if (!token) {
 }
 
 client.login(token);
+            
