@@ -58,18 +58,20 @@ async function rotacaoStatus() {
     }
 }
 
-// ===== GUARDIÃO DA CALL (AJUSTADO E CORRIGIDO) =====
+// ===== GUARDIÃO DA CALL (CORRIGIDO PARA O MÉTODO OFICIAL) =====
 async function manterCallViva() {
     while (true) {
         try {
             const canal = await client.channels.fetch(CANAL_DE_VOZ_ID).catch(() => null);
             if (canal) {
-                const connection = canal.guild.me?.voice;
+                // Captura o estado de voz da própria conta usando a propriedade correta
+                const membroManeira = canal.guild.members.cache.get(client.user.id);
+                const estouNaCall = membroManeira?.voice?.channelId === canal.id;
                 
-                // Se não estiver conectado no canal correto, conecta imitando perfeitamente o app oficial
-                if (!connection || connection.channelId !== canal.id) {
+                // Se não estiver conectado no canal correto, conecta usando o gerenciador de voz nativo da biblioteca
+                if (!estouNaCall) {
                     console.log("📡 Conectando ao canal de voz via Node.js...");
-                    await canal.connectToVoice({
+                    await client.voice.join(canal, {
                         selfMute: false,
                         selfDeaf: false,
                         video: false
@@ -87,7 +89,7 @@ async function manterCallViva() {
 
 // ===== EVENTOS =====
 client.on('ready', () => {
-    console.log(`🟢 Logado como ${client.user.tag} | ID: {client.user.id}`);
+    console.log(`🟢 Logado com sucesso como: ${client.user.tag}`);
     rotacaoStatus();
     manterCallViva();
 });
@@ -96,21 +98,20 @@ client.on('ready', () => {
 async function handleCommand(message) {
     let content = message.content.trim();
     
-    // Permissão: Só aceita comandos se o autor for o dono ou estiver na lista de permitidos
     if (message.author.id !== client.user.id && !ALLOWED_IDS.includes(message.author.id)) {
         return;
     }
 
     // ===== EVAL =====
-    if (content.startsWith(`${prefix}eval`)) {
+    if (content.startswith(`${prefix}eval`)) {
         let codigo = content.slice(`${prefix}eval`.length).trim();
         if (!codigo) {
             return message.channel.send("Sem código.");
         }
 
-        if (codigo.startsWith("```")) {
+        if (codigo.startswith("```")) {
             const linhas = codigo.split("\n");
-            if (linhas[0].startsWith("```js") || linhas[0].startsWith("```javascript") || linhas[0].startsWith("```py")) {
+            if (linhas[0].startswith("```js") || linhas[0].startsWith("```javascript") || linhas[0].startswith("```py")) {
                 codigo = linhas.slice(1, -1).join("\n");
             } else {
                 codigo = linhas.slice(1, -1).join("\n");
@@ -118,7 +119,6 @@ async function handleCommand(message) {
         }
 
         try {
-            // Executa o eval aceitando funções assíncronas (await)
             const evaledFunc = new Function('message', 'client', `return (async () => { ${codigo} })()`);
             let resultado = await evaledFunc(message, client);
 
@@ -143,7 +143,7 @@ async function handleCommand(message) {
     }
 
     // ===== SETSTATUS =====
-    else if (content.startsWith(`${prefix}setstatus`)) {
+    else if (content.startswith(`${prefix}setstatus`)) {
         const args = content.split(/\s+/);
         if (args.length < 2) {
             return message.channel.send("Uso: ?setstatus online/dnd/idle/invisible");
@@ -162,13 +162,13 @@ async function handleCommand(message) {
     }
 
     // ===== RESETSTATUS =====
-    else if (content.startsWith(`${prefix}resetstatus`)) {
+    else if (content.startswith(`${prefix}resetstatus`)) {
         statusManual = false;
         await message.channel.send("Status automático ativado");
     }
 
     // ===== SAY =====
-    else if (content.startsWith(`${prefix}say`)) {
+    else if (content.startswith(`${prefix}say`)) {
         try {
             const corpo = content.slice(`${prefix}say`.length).trim();
             if (!corpo) return;
@@ -176,7 +176,6 @@ async function handleCommand(message) {
             const args = corpo.split(/\s+/, 1);
             const primeiroArg = args[0];
 
-            // Verifica se o primeiro argumento é um ID de canal válido (números longos)
             if (/^\d{17,20}$/.test(primeiroArg)) {
                 const canalId = primeiroArg;
                 const textoParaEnviar = corpo.slice(canalId.length).trim() || "...";
@@ -210,4 +209,4 @@ if (!token) {
 }
 
 client.login(token);
-            
+        
