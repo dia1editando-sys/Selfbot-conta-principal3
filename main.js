@@ -31,7 +31,7 @@ let statusManual = false;
 
 // ===== STATUS ROTATIVO =====
 async function rotacaoStatus() {
-    const atividades = ["Arena Breakout", "Arena Breakout", "Arena Breakout"];
+    const atividades = ["", "", ""];
     let i = 0;
 
     while (true) {
