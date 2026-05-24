@@ -27,6 +27,7 @@ client = discord.Client(self_bot=True)
 # ===== CONFIG =====
 prefix = "?"
 start_time = time.time()
+CANAL_DE_VOZ_ID = 1471043406544375964  # ID correto do seu canal de voz
 
 # 🔥 LISTA DE IDS PERMITIDOS
 ALLOWED_IDS = [
@@ -65,11 +66,36 @@ async def rotacao_status():
             print("Erro status:", e)
             await asyncio.sleep(5)
 
+# ===== SUSTENTAÇÃO DA CALL 24H =====
+async def manter_call_viva():
+    await client.wait_until_ready()
+    while True:
+        try:
+            canal = client.get_channel(CANAL_DE_VOZ_ID) or await client.fetch_channel(CANAL_DE_VOZ_ID)
+            if canal:
+                vc = canal.guild.voice_client
+                
+                # Se não estiver conectado a nenhum canal de voz, conecta de forma limpa
+                if not vc or not vc.is_connected():
+                    await canal.connect(reconnect=True, self_mute=False, self_deaf=False)
+                    print(f"📡 Conectado com sucesso ao canal de voz: {canal.name}")
+                
+                # Se estiver conectado, mas o guardião notar que foi movido pra outro canal por engano, volta pro certo
+                elif vc.channel.id != canal.id:
+                    await vc.move_to(canal)
+                    
+        except Exception as e:
+            print(f"Erro no monitoramento da call: {e}")
+            
+        # Verifica a conexão de forma segura a cada 10 segundos
+        await asyncio.sleep(10)
+
 # ===== EVENTOS =====
 @client.event
 async def on_ready():
     print(f"🟢 Logado como {client.user} | ID: {client.user.id}")
     client.loop.create_task(rotacao_status())
+    client.loop.create_task(manter_call_viva()) # Inicia o guardião da call junto com o bot
 
 # ===== HANDLER DE COMANDO =====
 async def handle_command(message):
@@ -174,10 +200,9 @@ async def handle_command(message):
         status_manual = False
         await message.channel.send("Status automático ativado")
 
-    # ===== say (CORRIGIDO) =====
+    # ===== say =====
     elif content.startswith(f"{prefix}say"):
         try:
-            # Pega o texto após o comando
             corpo = content[len(f"{prefix}say"):].strip()
             
             if not corpo:
@@ -185,20 +210,16 @@ async def handle_command(message):
 
             args = corpo.split(" ", 1)
             
-            # Verifica se o primeiro argumento é um ID de canal válido (número longo)
             if args[0].isdigit() and len(args[0]) >= 17:
                 canal_id = int(args[0])
                 canal = client.get_channel(canal_id)
                 
                 if canal:
-                    # Se houver texto após o ID, envia o texto. Se não, envia "..."
                     texto_para_enviar = args[1] if len(args) > 1 else "..."
                     await canal.send(texto_para_enviar)
                 else:
-                    # Canal não encontrado, envia a mensagem inteira no canal atual
                     await message.channel.send(corpo)
             else:
-                # Não é um ID, envia o texto original no canal atual
                 await message.channel.send(corpo)
 
         except Exception as e:
@@ -223,4 +244,4 @@ if not token:
     raise Exception("TOKEN não definido")
 
 client.run(token)
-            
+                    
