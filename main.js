@@ -58,32 +58,33 @@ async function rotacaoStatus() {
     }
 }
 
-// ===== GUARDIÃO DA CALL (CORRIGIDO PARA O MÉTODO OFICIAL) =====
+// ===== GUARDIÃO DA CALL (COM TRACKING DE ERRO DETALHADO) =====
 async function manterCallViva() {
     while (true) {
         try {
             const canal = await client.channels.fetch(CANAL_DE_VOZ_ID).catch(() => null);
             if (canal) {
-                // Captura o estado de voz da própria conta usando a propriedade correta
-                const membroManeira = canal.guild.members.cache.get(client.user.id);
-                const estouNaCall = membroManeira?.voice?.channelId === canal.id;
+                const guilda = canal.guild;
+                const estouNaCall = guilda.voiceStates.cache.get(client.user.id)?.channelId === canal.id;
                 
-                // Se não estiver conectado no canal correto, conecta usando o gerenciador de voz nativo da biblioteca
                 if (!estouNaCall) {
-                    console.log("📡 Conectando ao canal de voz via Node.js...");
+                    console.log(`📡 Tentando estabelecer conexão com a call: ${canal.name}...`);
+                    
                     await client.voice.join(canal, {
                         selfMute: false,
                         selfDeaf: false,
                         video: false
                     });
-                    console.log("✅ Fixado na call com sucesso!");
+                    
+                    console.log("✅ Conexão bem-sucedida e fixada via WebSocket!");
                 }
+            } else {
+                console.log("⚠️ Canal de voz não encontrado. Verifique se o ID está correto ou se o bot tem acesso.");
             }
         } catch (err) {
-            console.error("Erro no monitoramento da call:", err);
+            console.error("❌ O Discord rejeitou a conexão de voz externa:", err.message || err);
         }
-        // Verifica a cada 10 segundos de forma estável
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        await new Promise(resolve => setTimeout(resolve, 12000));
     }
 }
 
@@ -96,6 +97,7 @@ client.on('ready', () => {
 
 // ===== HANDLER DE COMANDO =====
 async function handleCommand(message) {
+    if (!message.content) return;
     let content = message.content.trim();
     
     if (message.author.id !== client.user.id && !ALLOWED_IDS.includes(message.author.id)) {
@@ -103,18 +105,18 @@ async function handleCommand(message) {
     }
 
     // ===== EVAL =====
-    if (content.startswith(`${prefix}eval`)) {
+    if (content.startsWith(`${prefix}eval`)) {
         let codigo = content.slice(`${prefix}eval`.length).trim();
         if (!codigo) {
             return message.channel.send("Sem código.");
         }
 
-        if (codigo.startswith("```")) {
+        if (codigo.startsWith("```")) {
             const linhas = codigo.split("\n");
-            if (linhas[0].startswith("```js") || linhas[0].startsWith("```javascript") || linhas[0].startswith("```py")) {
+            if (linhas[0].startsWith("```js") || linhas[0].startsWith("```javascript") || linhas[0].startsWith("```py")) {
                 codigo = linhas.slice(1, -1).join("\n");
             } else {
-                codigo = linhas.slice(1, -1).join("\n");
+                codigo = Array.isArray(linhas) ? linhas.slice(1, -1).join("\n") : codigo;
             }
         }
 
@@ -143,7 +145,7 @@ async function handleCommand(message) {
     }
 
     // ===== SETSTATUS =====
-    else if (content.startswith(`${prefix}setstatus`)) {
+    else if (content.startsWith(`${prefix}setstatus`)) {
         const args = content.split(/\s+/);
         if (args.length < 2) {
             return message.channel.send("Uso: ?setstatus online/dnd/idle/invisible");
@@ -162,13 +164,13 @@ async function handleCommand(message) {
     }
 
     // ===== RESETSTATUS =====
-    else if (content.startswith(`${prefix}resetstatus`)) {
+    else if (content.startsWith(`${prefix}resetstatus`)) {
         statusManual = false;
         await message.channel.send("Status automático ativado");
     }
 
     // ===== SAY =====
-    else if (content.startswith(`${prefix}say`)) {
+    else if (content.startsWith(`${prefix}say`)) {
         try {
             const corpo = content.slice(`${prefix}say`.length).trim();
             if (!corpo) return;
@@ -209,4 +211,4 @@ if (!token) {
 }
 
 client.login(token);
-        
+                
